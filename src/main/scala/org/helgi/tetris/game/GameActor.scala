@@ -1,7 +1,11 @@
 package org.helgi.tetris.game
 
 import akka.actor.Actor
+import org.helgi.tetris.game.GameStatus.Active
 import org.helgi.tetris.game.Pos.*
+
+import scala.annotation.tailrec
+import scala.util.Random
 
 object Pos:
   type Pos = (Int, Int)
@@ -12,13 +16,20 @@ object Pos:
     def +(o: Pos) = (p.x + o.x, p.y + o.y)
 
 enum PieceKind:
-  case I
-  case J
-  case L
-  case O
-  case S
-  case T
-  case Z
+  case I, J, L, O, S, T, Z
+
+object PieceKind:
+  val kindsNr: Int = 7
+
+  def apply(n: Int): PieceKind = n match
+    case 0 => PieceKind.I
+    case 1 => PieceKind.J
+    case 2 => PieceKind.L
+    case 3 => PieceKind.O
+    case 4 => PieceKind.S
+    case 5 => PieceKind.T
+    case 6 => PieceKind.Z
+
 
 case class Piece(pos: Pos, kind: PieceKind, theta: Int = 0):
   require(Set(0, 90, 180, 270).contains(theta))
@@ -41,9 +52,13 @@ case class Piece(pos: Pos, kind: PieceKind, theta: Int = 0):
 
   def down(times: Int): Piece = moveVertically(-times)
 
+  def up: Piece = up(1)
+
+  def up(times: Int): Piece = moveVertically(times)
+
   def moveVertically(dy: Int): Piece = copy(pos = (pos.x, pos.y + dy))
 
-  def blocks: List[Pos] = (kind match {
+  lazy val blocks: List[Pos] = (kind match
     case PieceKind.I => List((-1, 0), (0, 0), (1, 0), (2, 0))
     case PieceKind.J => List((-1, 1), (-1, 0), (0, 0), (1, 0))
     case PieceKind.L => List((-1, 0), (0, 0), (1, 0), (1, 1))
@@ -51,13 +66,26 @@ case class Piece(pos: Pos, kind: PieceKind, theta: Int = 0):
     case PieceKind.S => List((-1, 0), (0, 0), (0, 1), (1, 1))
     case PieceKind.T => List((-1, 0), (0, 0), (0, 1), (1, 0))
     case PieceKind.Z => List((-1, 1), (0, 1), (0, 0), (1, 0))
-  }).map(rotateBlock).map(_ + pos)
+    ).map(rotateBlock).map(_ + pos)
 
-  def rotateBlock(block: Pos): Pos =
+  def rotatePos(pos: Pos): Pos =
     val c = math.cos(-theta.toDouble.toRadians).round.toInt
     val s = math.sin(-theta.toDouble.toRadians).round.toInt
 
-    (block.x * c - block.y * s, block.x * s + block.y * c)
+    (pos.x * c - pos.y * s, pos.x * s + pos.y * c)
+
+  def rotateBlock(block: Pos): Pos =
+    // handle special cases for O and I tetrominoes
+    if kind == PieceKind.O then block
+    else if kind == PieceKind.I then
+      theta match {
+        case 0 => rotatePos(block)
+        case 90 => rotatePos(block) + (1, 0)
+        case 180 => rotatePos(block) + (1, -1)
+        case 270 => rotatePos(block) + (0, -1)
+      }
+    else
+      rotatePos(block)
 
 
 object Test:
@@ -67,64 +95,117 @@ object Test:
 
     println(p.rotate(4) == p)
 
-    println(mkTetrisField(p.blocks))
-    println(mkTetrisField(p.rotate.blocks))
-    println(mkTetrisField(p.rotate(2).blocks))
-    println(mkTetrisField(p.rotate(3).blocks))
-    println(mkTetrisField(p.rotate(4).blocks))
+    println(mkTetrisField(p.blocks) + "\n")
+    println(mkTetrisField(p.rotate.blocks) + "\n")
+    println(mkTetrisField(p.rotate(2).blocks) + "\n")
+    println(mkTetrisField(p.rotate(3).blocks) + "\n")
+    println(mkTetrisField(p.rotate(4).blocks) + "\n")
 
   def mkTetrisField(ps: Seq[Pos]): String =
-    def mkNthRow(i: Int): String =
+    def mkIthRow(i: Int): String =
       (for j <- 1 to 10
         yield if ps.contains((j, i)) then "O" else "-").mkString
 
-    print("\n")
-
     (for i <- 20 to 1 by -1
-      yield mkNthRow(i)).mkString("\n")
+      yield mkIthRow(i)).mkString("\n")
 
 
 enum GameCommand:
-  case Rotate
-  case Left
-  case Right
-  case Tick
-  case Drop
-  case Hold
+  case Rotate, Left, Right, Tick, Drop, Hold
 
-case class GameState(gridSize: (Int, Int), blocks: List[Pos],
-                     currentPiece: Piece, nextPiece: Piece,
-                     heldPiece: Option[Piece] = None, canHold: Boolean = true):
+enum GameStatus:
+  case Active, Over
 
-  val initPos: Pos = (gridSize._1 / 2, gridSize._2 / 2)
+case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
+                     currentPiece: Piece, nextPiece: PieceKind,
+                     heldPiece: Option[PieceKind] = None, canHold: Boolean = true,
+                     status: GameStatus = Active):
 
-  def rotate: GameState = transit(_.rotate)
+  val rng = new Random()
 
-  def left: GameState = transit(_.left)
+  val initPos: Pos = (gridSize._1 / 2, gridSize._2 - 1)
 
-  def right: GameState = transit(_.right)
-
-  def tick: GameState = transit(_.down, {
-    this
+  def rotate: GameState = makeMove(_.rotate, { rotatedPiece =>
+    ???
   })
 
-  def drop: GameState = ???
+  def left: GameState = makeMove(_.left)
 
-  def hold: GameState = ???
+  def right: GameState = makeMove(_.right)
 
-  def inBounds(pos: Pos): Boolean =
-    (pos.x >= 0) && (pos.x < gridSize._1) && (pos.y >= 0) && (pos.y < gridSize._2)
+  def tick: GameState = makeMove(_.down, { _ => afterDropState })
 
-  def tryTransit(s: GameState): Option[GameState] =
-    val currentPieceBlocks = s.currentPiece.blocks
-    if currentPieceBlocks forall s.inBounds then
-      if (s.blocks intersect currentPieceBlocks).isEmpty then Some(s)
-      else None
-    else None
+  def drop: GameState =
+    checkMove(move(_.down))
+      .map(_.drop)
+      .getOrElse(afterDropState)
 
-  def transit(f: Piece => Piece, onFail: => GameState = this): GameState = tryTransit(
-    copy(currentPiece = f(currentPiece))
-  ).getOrElse(onFail)
+  val afterDropState: GameState =
+    tryToGenerateNewPiece.map {
+      GameState(gridSize, placedBlocks ++ currentPiece.blocks,
+        _, randomPiece, heldPiece)
+    }.getOrElse(copy(status = GameStatus.Over))
+
+  @tailrec
+  private def tryToPlace(blocks: Set[Pos], p: Piece): Option[Piece] =
+    if !inBound(p.pos) then None
+    else if !isColliding(blocks, p) then Some(p)
+    else tryToPlace(blocks, p.copy(pos = p.pos + (0, 1)))
+
+  def tryToGenerateNewPiece: Option[Piece] =
+    val piece = Piece(initPos, nextPiece)
+    val blocks = placedBlocks ++ currentPiece.blocks
+
+    tryToPlace(blocks, piece)
+
+  def hold: GameState =
+    if canHold then
+      heldPiece.orElse(Some(nextPiece))
+        .map(Piece(initPos, _))
+        .flatMap(tryToPlace(placedBlocks, _)).map { cp =>
+        val hp = Some(currentPiece.kind)
+        val np = randomPiece
+        copy(currentPiece = cp, nextPiece = np, heldPiece = hp, canHold = false)
+      }.getOrElse(this)
+    else this
+
+  def randomPiece: PieceKind = PieceKind(rng.nextInt(PieceKind.kindsNr))
+
+  def inBoundOrOverTop(block: Pos): Boolean =
+    (block.x >= 1) && (block.x <= gridSize._1) && (block.y >= 1)
+
+  def inBound(block: Pos): Boolean =
+    inBoundOrOverTop(block) && (block.y <= gridSize._2)
+
+  def inBound(p: Piece): Boolean =
+    p.blocks.forall(inBoundOrOverTop) &&
+      p.blocks.exists(inBound)
+
+  def isColliding(blocks: Set[Pos], block: Pos): Boolean =
+    blocks.contains(block)
+
+  def isColliding(blocks: Set[Pos], p: Piece): Boolean =
+    p.blocks.exists(isColliding(blocks, _))
+
+  def isColliding(p: Piece): Boolean =
+    isColliding(placedBlocks, p)
+
+  def validatePieceLocation(p: Piece): Boolean =
+    !isColliding(p) && inBound(p)
+
+  def checkMove(s: GameState): Option[GameState] =
+    if s.validatePieceLocation(s.currentPiece) then Some(s) else None
+
+  def tryMove(f: Piece => Piece): Option[GameState] =
+    checkMove(move(f))
+
+  def makeMove(f: Piece => Piece, onFail: (=> Piece) => GameState = _ => this): GameState =
+    val newCurrentPiece = f(currentPiece)
+    checkMove(move(newCurrentPiece)).getOrElse(onFail(newCurrentPiece))
+
+  def move(f: Piece => Piece): GameState = move(f(currentPiece))
+
+  def move(newCurrentPiece: Piece): GameState = copy(currentPiece = newCurrentPiece)
 
 
 class GameActor(initState: GameState) extends Actor :
