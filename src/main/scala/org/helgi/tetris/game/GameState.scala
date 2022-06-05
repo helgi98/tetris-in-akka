@@ -23,6 +23,7 @@ case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
 
   private lazy val startPlace: Pos = (gridSize._1 / 2, gridSize._2 - 1)
 
+  // TODO add collision handling
   def rotate: GameState = makeMove(_.rotate)
 
   def left: GameState = makeMove(_.left)
@@ -74,14 +75,14 @@ case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
     inBoundOrOverTop(block) && block.y <= gridSize._2
 
   private def inBound(p: Piece): Boolean =
-    p.blocks forall inBoundOrOverTop &&
-      p.blocks exists inBound
+    p.blocks.forall(inBoundOrOverTop) &&
+      p.blocks.exists(inBound)
 
   private def isColliding(blocks: Set[Pos], block: Pos): Boolean =
     blocks contains block
 
   private def isColliding(blocks: Set[Pos], p: Piece): Boolean =
-    p.blocks exists isColliding(blocks, _)
+    p.blocks.exists(isColliding(blocks, _))
 
   private def isColliding(p: Piece): Boolean =
     isColliding(placedBlocks, p)
