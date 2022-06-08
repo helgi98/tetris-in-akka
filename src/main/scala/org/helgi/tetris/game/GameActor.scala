@@ -1,6 +1,7 @@
 package org.helgi.tetris.game
 
 import akka.actor.{Actor, Props}
+import org.helgi.tetris.game.GameSessionMsg.GameOver
 
 import scala.annotation.tailrec
 
@@ -46,8 +47,15 @@ class GameActor(initState: GameData) extends Actor :
   def transitState(data: GameData)(f: GameState => GameState): Unit =
     val updatedState = f(data.gs)
     val updatedData = checkLinesCleared(data, updatedState)
-    context.become(onMessage(updatedData))
-    sender() ! updatedData
+
+    if updatedState.status == GameStatus.Over then
+      context.become {
+        _ =>
+      }
+      sender() ! GameOver(updatedData)
+    else
+      context.become(onMessage(updatedData))
+      sender() ! updatedData
 
 
 object GameActor:

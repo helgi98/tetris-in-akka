@@ -9,6 +9,7 @@ object Pos:
     def x = p._1
     def y = p._2
     def +(o: Pos) = (p.x + o.x, p.y + o.y)
+    def -(o: Pos) = (p.x - o.x, p.y - o.y)
 
 enum TetrominoType:
   case I, J, L, O, S, T, Z

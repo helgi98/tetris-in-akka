@@ -1,5 +1,6 @@
 package org.helgi.tetris.repository
 
+import akka.actor.Actor
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits.*
@@ -46,3 +47,15 @@ object GameResultRepository:
          |INSERT INTO game_result(user_id, score, lines_cleared, lvl, started_at, finished_at)
          |VALUE (${gr.userId}, ${gr.score}, ${gr.linesCleared}, ${gr.lvl}, ${gr.startedAt}, ${gr.finishedAt})
          |""".stripMargin.update
+
+enum GameResultRepoCommand:
+  case Save(gameResult: GameResult)
+
+class GameResultRepoActor(resultRepository: GameResultRepository) extends Actor :
+
+  import GameResultRepoCommand.*
+
+  override def receive: Receive = _ match
+    case Save(gameResult) =>
+      resultRepository.saveGameResult(gameResult)
+  
