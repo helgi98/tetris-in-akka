@@ -1,6 +1,6 @@
 package org.helgi.tetris.game
 
-import org.helgi.tetris.game.GameStatus.Active
+import org.helgi.tetris.game.GameStatus.*
 import org.helgi.tetris.game.Pos.*
 
 import scala.annotation.tailrec
@@ -15,13 +15,25 @@ def randomStream(random: Random): TetrominoProducer =
 enum GameStatus:
   case Active, Over
 
-case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
+
+object GameState:
+  private[this] val rng = new Random()
+
+  def init(grid: (Int, Int)): GameState =
+    GameState(grid, Set.empty, Piece(startPlace(grid), randomPiece), randomPiece)
+
+  private def startPlace(grid: (Int, Int)): Pos = (grid._1 / 2, grid._2 - 1)
+
+  private def randomPiece: TetrominoType =
+    TetrominoType(rng.nextInt(TetrominoType.typesNr))
+
+
+case class GameState(grid: (Int, Int), placedBlocks: Set[Pos],
                      currentPiece: Piece, next: TetrominoType,
                      held: Option[TetrominoType] = None, canHold: Boolean = true,
-                     status: GameStatus = Active):
-  private lazy val rng = new Random()
+                     status: GameStatus = Active, totalLinesCleared: Int = 0):
 
-  private lazy val startPlace: Pos = (gridSize._1 / 2, gridSize._2 - 1)
+  import GameState.*
 
   // TODO add collision handling
   def rotate: GameState = makeMove(_.rotate)
@@ -40,7 +52,7 @@ case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
   def hold: GameState =
     if canHold then
       held.orElse(Some(next))
-        .map(Piece(startPlace, _))
+        .map(Piece(startPlace(grid), _))
         .flatMap(tryToPlace(placedBlocks, _))
         .map { cp =>
           val hp = Some(currentPiece.kind)
@@ -50,10 +62,14 @@ case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
     else this
 
   private def afterDropState: GameState =
-    tryToGenerateNewPiece.map {
-      GameState(gridSize, placedBlocks ++ currentPiece.blocks,
-        _, randomPiece, held)
-    }.getOrElse(copy(status = GameStatus.Over))
+    tryToGenerateNewPiece.map { it =>
+      val (linesCleared, blocks) = clearLines(placedBlocks ++ currentPiece.blocks)
+      copy(placedBlocks = blocks, currentPiece = it, next = randomPiece,
+        totalLinesCleared = totalLinesCleared + linesCleared)
+    }.getOrElse(copy(status = Over))
+
+  // TODO add line clearing algorithm
+  private def clearLines(blocks: Set[Pos]): (Int, Set[Pos]) = (0, blocks)
 
   @tailrec
   private def tryToPlace(blocks: Set[Pos], p: Piece): Option[Piece] =
@@ -62,21 +78,19 @@ case class GameState(gridSize: (Int, Int), placedBlocks: Set[Pos],
     else tryToPlace(blocks, p.copy(pos = p.pos + (0, 1)))
 
   private def tryToGenerateNewPiece: Option[Piece] =
-    val piece = Piece(startPlace, next)
+    val piece = Piece(startPlace(grid), next)
     val blocks = placedBlocks ++ currentPiece.blocks
     tryToPlace(blocks, piece)
 
-  private def randomPiece: TetrominoType = TetrominoType(rng.nextInt(TetrominoType.typesNr))
-
   private def inBoundOrOverTop(block: Pos): Boolean =
-    block.x >= 1 && block.x <= gridSize._1 && block.y >= 1
+    block.x >= 1 && block.x <= grid._1 && block.y >= 1
 
   private def inBound(block: Pos): Boolean =
-    inBoundOrOverTop(block) && block.y <= gridSize._2
+    inBoundOrOverTop(block) && block.y <= grid._2
 
   private def inBound(p: Piece): Boolean =
     p.blocks.forall(inBoundOrOverTop) &&
-      p.blocks.exists(inBound)
+      p.blocks.exists(_.y <= grid._2)
 
   private def isColliding(blocks: Set[Pos], block: Pos): Boolean =
     blocks contains block

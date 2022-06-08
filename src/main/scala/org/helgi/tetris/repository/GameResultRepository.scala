@@ -7,13 +7,10 @@ import doobie.implicits.*
 import doobie.implicits.javatime.*
 import doobie.util.fragments.*
 import doobie.util.transactor.Transactor
+import org.helgi.tetris.model.GameResult
 
 import java.time.Instant
 import scala.concurrent.Future
-
-
-case class GameResult(id: Long, userId: Long, score: Int, linesCleared: Int, maxSpeed: Int,
-                      startedAt: Instant, finishedAt: Instant)
 
 trait GameResultRepository:
   def getGameResultsByUser(userId: Long): Future[List[GameResult]]
@@ -46,6 +43,6 @@ object GameResultRepository:
 
   def gameResultInsert(gr: GameResult): doobie.Update0 =
     sql"""
-         |INSERT INTO game_result(user_id, score, lines_cleared, max_speed, started_at, finished_at)
-         |VALUE (${gr.userId}, ${gr.score}, ${gr.linesCleared}, ${gr.maxSpeed}, ${gr.startedAt}, ${gr.finishedAt})
+         |INSERT INTO game_result(user_id, score, lines_cleared, lvl, started_at, finished_at)
+         |VALUE (${gr.userId}, ${gr.score}, ${gr.linesCleared}, ${gr.lvl}, ${gr.startedAt}, ${gr.finishedAt})
          |""".stripMargin.update

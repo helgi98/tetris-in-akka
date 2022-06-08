@@ -60,8 +60,8 @@ case class Piece(pos: Pos, kind: TetrominoType, theta: Int = 0):
     case TetrominoType.O => List((0, 1), (0, 0), (1, 0), (1, 1))
     case TetrominoType.S => List((-1, 0), (0, 0), (0, 1), (1, 1))
     case TetrominoType.T => List((-1, 0), (0, 0), (0, 1), (1, 0))
-    case TetrominoType.Z => List((-1, 1), (0, 1), (0, 0), (1, 0))
-    ).map(rotateBlock).map(_ + pos)
+    case TetrominoType.Z => List((-1, 1), (0, 1), (0, 0), (1, 0)))
+    .map(rotateBlock).map(_ + pos)
 
   def rotatePos(pos: Pos): Pos =
     val c = math.cos(-theta.toDouble.toRadians).round.toInt
@@ -69,18 +69,15 @@ case class Piece(pos: Pos, kind: TetrominoType, theta: Int = 0):
 
     (pos.x * c - pos.y * s, pos.x * s + pos.y * c)
 
-  def rotateBlock(block: Pos): Pos =
-  // handle special cases for O and I tetrominoes
-    if kind == TetrominoType.O then block
-    else if kind == TetrominoType.I then
-      theta match {
-        case 0 => rotatePos(block)
-        case 90 => rotatePos(block) + (1, 0)
-        case 180 => rotatePos(block) + (1, -1)
-        case 270 => rotatePos(block) + (0, -1)
-      }
-    else
-      rotatePos(block)
+  def rotateBlock(block: Pos): Pos = kind match
+    // handle special cases for O and I tetrominoes
+    case TetrominoType.O => block
+    case TetrominoType.I => theta match
+      case 0 => rotatePos(block)
+      case 90 => rotatePos(block) + (1, 0)
+      case 180 => rotatePos(block) + (1, -1)
+      case 270 => rotatePos(block) + (0, -1)
+    case _ => rotatePos(block)
 
 
 object Test:

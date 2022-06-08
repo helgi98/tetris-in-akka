@@ -6,10 +6,9 @@ import cats.implicits.*
 import doobie.implicits.*
 import doobie.util.fragments.*
 import doobie.util.transactor.Transactor
+import org.helgi.tetris.model.User
 
 import scala.concurrent.Future
-
-case class User(id: Long, username: String, displayName: String, email: String, password: String)
 
 trait UserRepository:
 

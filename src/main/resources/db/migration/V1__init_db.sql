@@ -11,7 +11,7 @@ create table game_result (
     user_id integer not null references user_info
     score integer not null,
     lines_cleared integer not null,
-    max_speed integer not null,
+    lvl integer not null,
     started_at timestamptz not null,
     finished_at timestamptz not null
 );
