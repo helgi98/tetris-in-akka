@@ -11,8 +11,10 @@ import cats.effect.IO.asyncForIO
 import com.typesafe.config.Config
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import doobie.hikari.HikariTransactor
+import org.helgi.tetris.api.users.{UserApi, UserApiActor}
 import org.helgi.tetris.config.JwtConfig
 import org.helgi.tetris.repository.UserRepository
+
 import scala.language.implicitConversions
 import org.helgi.tetris.util.Conversions.javaToScalaDuration
 
