@@ -13,21 +13,20 @@ import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import doobie.hikari.HikariTransactor
 import org.helgi.tetris.config.JwtConfig
 import org.helgi.tetris.repository.UserRepository
+import scala.language.implicitConversions
+import org.helgi.tetris.util.Conversions.javaToScalaDuration
 
 import scala.concurrent.ExecutionContextExecutor
-import scala.concurrent.duration.{DurationInt, DurationLong, FiniteDuration}
 
 class RestApi(system: ActorSystem, val ds: HikariDataSource, conf: Config) extends UserApi with GameApi :
 
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
-  implicit val requestTimeout: Timeout = Timeout(30.seconds)
+  implicit val requestTimeout: Timeout = Timeout(conf.getDuration("akka.http.server.request-timeout"))
 
   private val ta: HikariTransactor[IO] = {
     HikariTransactor(ds, executionContext)
   }
-
-  given Conversion[java.time.Duration, FiniteDuration] = _.toNanos.nanos
 
   override val userActor: ActorRef = {
     val userRepo = UserRepository(ta)
