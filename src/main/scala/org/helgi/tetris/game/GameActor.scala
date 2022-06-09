@@ -1,7 +1,7 @@
 package org.helgi.tetris.game
 
 import akka.actor.{Actor, Props}
-import org.helgi.tetris.game.GameSessionMsg.GameOver
+import org.helgi.tetris.game.GameSessionMessage.GameOver
 
 import scala.annotation.tailrec
 

@@ -6,11 +6,13 @@ object Common {
   private val akkaVersion = "2.6.19"
   private val akkaHttpVersion = "10.2.9"
   private val doobieVersion = "1.0.0-RC1"
+  private val jwtVersion = "0.9.1"
   private val flywayVersion = "8.5.11"
   private val pureConfigVersion = "0.17.1"
 
   private val postgresVersion = "42.3.6"
   private val logbackVersion = "1.2.11"
+  private val commonsCodecVersion = "1.15"
 
   private[this] def projectSettings = Seq(
     name := "tetris-in-akka"
@@ -23,11 +25,16 @@ object Common {
     libraryDependencies ++= Seq(
       // Akka
       "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+      "com.typesafe.akka" %% "akka-stream" % akkaVersion,
       "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
       "org.tpolecat" %% "doobie-core" % doobieVersion,
       "org.tpolecat" %% "doobie-postgres" % doobieVersion,
+      "org.tpolecat" %% "doobie-hikari" % doobieVersion,
+      "org.flywaydb" % "flyway-core" % flywayVersion,
       "ch.qos.logback" % "logback-classic" % logbackVersion,
       "org.postgresql" % "postgresql" % postgresVersion,
+      "commons-codec" % "commons-codec" % commonsCodecVersion,
+      "io.jsonwebtoken" % "jjwt" % jwtVersion,
     ) ++ scala3CrossDependencies
   )
 

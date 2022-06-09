@@ -2,7 +2,7 @@ package org.helgi.tetris.game
 
 import akka.actor.SupervisorStrategy.*
 import akka.actor.{Actor, ActorRef, Cancellable, OneForOneStrategy, PoisonPill, SupervisorStrategy}
-import org.helgi.tetris.game.GameSessionMsg.*
+import org.helgi.tetris.game.GameSessionMessage.*
 import org.helgi.tetris.model.GameResult
 import org.helgi.tetris.repository.{GameResultRepoActor, GameResultRepoCommand, GameResultRepository}
 
@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
-enum GameSessionMsg:
+enum GameSessionMessage:
   case Start
   case GameOver(gd: GameData)
 
@@ -64,7 +64,7 @@ class GameSessionActor(userId: Option[Long], gameOptions: GameOptions,
           GameResult(0, id, gd.score, gd.gs.totalLinesCleared, gd.lvl, gameSession.startedAt, Instant.now())
         )
       }
-      self ! PoisonPill
+      context.stop(self)
 
 
 

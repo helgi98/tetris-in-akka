@@ -1,6 +1,6 @@
 package org.helgi.tetris.repository
 
-import akka.actor.Actor
+import akka.actor.{Actor, ActorLogging}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import cats.implicits.*
@@ -51,11 +51,15 @@ object GameResultRepository:
 enum GameResultRepoCommand:
   case Save(gameResult: GameResult)
 
-class GameResultRepoActor(resultRepository: GameResultRepository) extends Actor :
+class GameResultRepoActor(resultRepository: GameResultRepository) extends Actor with ActorLogging :
 
   import GameResultRepoCommand.*
 
   override def receive: Receive = _ match
     case Save(gameResult) =>
-      resultRepository.saveGameResult(gameResult)
+      try
+        resultRepository.saveGameResult(gameResult)
+      catch
+        // We don't want to fail this actor in case of exception
+        case ex: Exception => log.error(ex, "Failed to save game result")
   

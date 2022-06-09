@@ -1,8 +1,8 @@
 create table user_info (
     id serial primary key,
-    username text not null,
+    username text not null unique,
     display_name text not null,
-    email text not null,
+    email text not null unique,
     password text not null
 );
 

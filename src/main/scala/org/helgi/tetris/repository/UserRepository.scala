@@ -11,6 +11,7 @@ import org.helgi.tetris.model.User
 import scala.concurrent.Future
 
 trait UserRepository:
+  def checkUserExist(username: String, email: String): Future[Boolean]
 
   def createUser(user: User): Future[User]
 
@@ -23,6 +24,10 @@ trait UserRepository:
 object UserRepository:
   def apply(ta: Transactor[IO]): UserRepository =
     new UserRepository :
+      override def checkUserExist(username: String, email: String): Future[Boolean] =
+        (userSelect ++ whereOr(byUsername(username), byEmail(email))).query[User].to[List].transact(ta)
+          .map(_.size > 0).unsafeToFuture()
+
       override def createUser(user: User): Future[User] =
         (for
           _ <- userInsert(user).run
