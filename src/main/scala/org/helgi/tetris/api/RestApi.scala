@@ -12,15 +12,15 @@ import com.typesafe.config.Config
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
 import doobie.hikari.HikariTransactor
 import org.helgi.tetris.api.users.{UserApi, UserApiActor}
+import org.helgi.tetris.api.game.GameApi
 import org.helgi.tetris.config.JwtConfig
-import org.helgi.tetris.repository.UserRepository
-
-import scala.language.implicitConversions
+import org.helgi.tetris.repository.{GameResultRepository, UserRepository}
 import org.helgi.tetris.util.Conversions.javaToScalaDuration
 
 import scala.concurrent.ExecutionContextExecutor
+import scala.language.implicitConversions
 
-class RestApi(system: ActorSystem, val ds: HikariDataSource, conf: Config) extends UserApi with GameApi :
+class RestApi(val system: ActorSystem, ds: HikariDataSource, conf: Config) extends UserApi with GameApi :
 
   implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
@@ -30,18 +30,15 @@ class RestApi(system: ActorSystem, val ds: HikariDataSource, conf: Config) exten
     HikariTransactor(ds, executionContext)
   }
 
-  override val userActor: ActorRef = {
-    val userRepo = UserRepository(ta)
-    val jwtConfig = JwtConfig(conf.getString("jwt.secret"),
-      conf.getDuration("jwt.expiration"))
-    system.actorOf(UserApiActor.props(userRepo, jwtConfig))
-  }
+  // UserApi dependencies
+  override val jwtConfig: JwtConfig = JwtConfig(conf.getString("jwt.secret"),
+    conf.getDuration("jwt.expiration"))
+
+  override val userRepo: UserRepository = UserRepository(ta)
+
+  override val gameRepo: GameResultRepository = GameResultRepository(ta)
 
   def routes: Route = pathPrefix("api") {
     userRoutes ~ gameRoutes
   }
-
-
-trait GameApi:
-  def gameRoutes: Route = ???
 

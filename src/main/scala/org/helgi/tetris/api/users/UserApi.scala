@@ -9,14 +9,10 @@ import akka.http.scaladsl.server.Directives.*
 import akka.pattern.ask
 import akka.util.Timeout
 import doobie.hikari.HikariTransactor
-import io.jsonwebtoken.{Jwts, SignatureAlgorithm}
-import org.apache.commons.codec.digest.DigestUtils
-import org.apache.commons.codec.digest.DigestUtils.sha256Hex
 import org.helgi.tetris.api.*
-import org.helgi.tetris.api.users.UserApiMessage.Signup
 import org.helgi.tetris.config.JwtConfig
-import org.helgi.tetris.model.User
 import org.helgi.tetris.repository.UserRepository
+import org.helgi.tetris.util.JwtDirectives.*
 import spray.json.{DefaultJsonProtocol, RootJsonFormat}
 
 import java.util.Date
@@ -27,11 +23,17 @@ trait UserApi extends UserJsonSupport :
 
   import UserApiMessage.*
 
+  val system: ActorSystem
+
   implicit val executionContext: ExecutionContext
 
   implicit val requestTimeout: Timeout
 
-  val userActor: ActorRef
+  val userRepo: UserRepository
+
+  val jwtConfig: JwtConfig
+
+  private val userActor = system.actorOf(UserApiActor.props(userRepo, jwtConfig))
 
   def userRoutes: Route =
     pathPrefix("user") {
@@ -40,9 +42,8 @@ trait UserApi extends UserJsonSupport :
           post {
             entity(as[RegistrationData]) { rd =>
               onSuccess(userActor.ask(Signup(rd)).mapTo[Option[UserData]]) {
-                _ match
-                  case Some(ud) => complete(Created, ud)
-                  case None => complete(Conflict)
+                case Some(ud) => complete(Created, ud)
+                case None => complete(Conflict)
               }
             }
           }
@@ -53,10 +54,18 @@ trait UserApi extends UserJsonSupport :
             post {
               entity(as[LoginPassword]) { idPass =>
                 onSuccess(userActor.ask(Login(idPass)).mapTo[Option[LoginToken]]) {
-                  _ match
-                    case Some(lt) => complete(OK, lt)
-                    case None => complete(NotFound)
+                  case Some(lt) => complete(OK, lt)
+                  case None => complete(NotFound)
                 }
+              }
+            }
+          }
+        } ~
+        path("info") {
+          pathEndOrSingleSlash {
+            get {
+              authenticate(jwtConfig.secret) { userId =>
+                complete(OK, userActor.ask(Info(userId)).mapTo[Option[UserData]].map(_.get))
               }
             }
           }

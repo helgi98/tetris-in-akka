@@ -1,10 +1,11 @@
 package org.helgi.tetris.game
 
 import akka.actor.SupervisorStrategy.*
-import akka.actor.{Actor, ActorRef, Cancellable, OneForOneStrategy, PoisonPill, SupervisorStrategy}
+import akka.actor.{Actor, ActorRef, Cancellable, OneForOneStrategy, PoisonPill, Props, SupervisorStrategy}
+import org.helgi.tetris.api.game.GameProtocol
 import org.helgi.tetris.game.GameSessionMessage.*
 import org.helgi.tetris.model.GameResult
-import org.helgi.tetris.repository.{GameResultRepoActor, GameResultRepoCommand, GameResultRepository}
+import org.helgi.tetris.repository.{GameRepoCommand, GameResultRepository}
 
 import java.time.Instant
 import java.util.concurrent.TimeUnit
@@ -12,10 +13,11 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 
 enum GameSessionMessage:
-  case Start
+  case Start(broker: ActorRef)
+  case Update(gd: GameData)
   case GameOver(gd: GameData)
 
-case class GameOptions(initLvl: Int, grid: (Int, Int) = (10, 20))
+case class GameOptions(initLvl: Int = 0, grid: (Int, Int) = (10, 20))
 
 case class GameSession(ticker: Cancellable, gameData: GameData, startedAt: Instant)
 
@@ -30,41 +32,42 @@ class GameSessionActor(userId: Option[Long], gameOptions: GameOptions,
     case _ => Resume
   }
 
-  def getSpeed(lvl: Int): FiniteDuration = FiniteDuration((math.pow(1 - 0.25, lvl) * 1000).round, TimeUnit.MILLISECONDS)
-
   override def receive: Receive = _ match
-    case Start =>
+    case Start(broker) =>
       val initSpeed = getSpeed(gameOptions.initLvl)
-      val scheduledTick = context.system.scheduler.scheduleAtFixedRate(0.milli, initSpeed) { () =>
-        gameActor ! GameCommand.Tick
-      }
-      context.become(activeGame(GameSession(scheduledTick, initGameData, Instant.now())))
+      val scheduledTick = startTicker(initSpeed)
+      context.become(activeGame(broker, GameSession(scheduledTick, initGameData, Instant.now())))
 
-  def startTicker(speed: FiniteDuration): Cancellable =
-    context.system.scheduler.scheduleAtFixedRate(0.milli, speed) { () =>
-      gameActor ! GameCommand.Tick
-    }
-
-  def activeGame(gameSession: GameSession): Receive = _ match
+  private def activeGame(broker: ActorRef, gameSession: GameSession): Receive = _ match
     case c: GameCommand =>
       gameActor ! c
-    case updatedGD: GameData =>
+    case Update(updatedGD) =>
       if gameSession.gameData.lvl < updatedGD.lvl then
         gameSession.ticker.cancel()
         val updatedSpeed = getSpeed(gameSession.gameData.lvl)
         val updatedTicker = startTicker(updatedSpeed)
-        context.become(activeGame(gameSession.copy(ticker = updatedTicker, gameData = updatedGD)))
-      else context.become(activeGame(gameSession.copy(gameData = updatedGD)))
-    // TODO resend state
-    case GameOver(gd: GameData) =>
+        context.become(activeGame(broker, gameSession.copy(ticker = updatedTicker, gameData = updatedGD)))
+      else context.become(activeGame(broker, gameSession.copy(gameData = updatedGD)))
+      broker ! GameProtocol.GameStateMsg(updatedGD)
+    case GameOver(lastGd: GameData) =>
       gameSession.ticker.cancel()
-      // TODO send final result
+      broker ! GameProtocol.GameStateMsg(lastGd)
+      broker ! GameProtocol.GameOver
       userId.foreach { id =>
-        grRepo ! GameResultRepoCommand.Save(
-          GameResult(0, id, gd.score, gd.gs.totalLinesCleared, gd.lvl, gameSession.startedAt, Instant.now())
+        grRepo ! GameRepoCommand.Save(
+          GameResult(0, id, lastGd.score, lastGd.gs.totalLinesCleared, lastGd.lvl, gameSession.startedAt, Instant.now())
         )
       }
       context.stop(self)
 
+  private def getSpeed(lvl: Int): FiniteDuration =
+    FiniteDuration((math.pow(1 - 0.25, lvl) * 1000).round, TimeUnit.MILLISECONDS)
 
+  private def startTicker(speed: FiniteDuration): Cancellable =
+    context.system.scheduler.scheduleAtFixedRate(0.milli, speed) { () =>
+      gameActor ! GameCommand.Tick
+    }
 
+object GameSessionActor:
+  def props(userId: Option[Long], gameOptions: GameOptions,
+            grRepo: ActorRef): Props = Props(new GameSessionActor(userId, gameOptions, grRepo))

@@ -13,8 +13,10 @@ import scala.concurrent.{ExecutionContext, Future}
 enum UserApiMessage:
   case Signup(registrationData: RegistrationData)
   case Login(loginPassword: LoginPassword)
+  case Info(userId: Long)
 
 class UserApiActor(repo: UserRepository, jwtConfig: JwtConfig)(implicit val ec: ExecutionContext) extends Actor :
+
   import UserApiMessage.*
 
   override def receive: Receive = _ match
@@ -38,14 +40,20 @@ class UserApiActor(repo: UserRepository, jwtConfig: JwtConfig)(implicit val ec: 
       user.foreach {
         sender() ! _.flatMap { u =>
           if sha256Hex(lp.password).equals(u.password) then
-            Some(LoginToken(u.username, encodeToken(u.username)))
+            Some(LoginToken(u.username, encodeToken(u.id)))
           else None
         }
       }
+    case Info(userId) =>
+      repo.findUserById(userId).map {
+        _ map { u => UserData(u.username, u.displayName, u.email) }
+      } foreach {
+        sender() ! _
+      }
 
-  private def encodeToken(username: String): String =
+  private def encodeToken(userId: Long): String =
     Jwts.builder()
-      .setSubject(username)
+      .setSubject(userId.toString)
       .setExpiration(new Date(System.currentTimeMillis() + jwtConfig.expirationTime.toMillis))
       .signWith(SignatureAlgorithm.HS512, jwtConfig.secret)
       .compact()

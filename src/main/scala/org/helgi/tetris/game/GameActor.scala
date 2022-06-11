@@ -1,7 +1,7 @@
 package org.helgi.tetris.game
 
 import akka.actor.{Actor, Props}
-import org.helgi.tetris.game.GameSessionMessage.GameOver
+import org.helgi.tetris.game.GameSessionMessage.{GameOver, Update}
 
 import scala.annotation.tailrec
 
@@ -55,7 +55,7 @@ class GameActor(initState: GameData) extends Actor :
       sender() ! GameOver(updatedData)
     else
       context.become(onMessage(updatedData))
-      sender() ! updatedData
+      sender() ! Update(updatedData)
 
 
 object GameActor:

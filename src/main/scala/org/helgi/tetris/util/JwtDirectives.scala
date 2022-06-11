@@ -10,27 +10,27 @@ object JwtDirectives:
   import HeaderDirectives.*
   import RouteDirectives.*
 
-  def authenticateOpt(secret: String): Directive1[Option[String]] = {
+  def authenticateOpt(secret: String): Directive1[Option[Long]] = {
     headerValueByName("Authorization")
       .map(parseToken(secret, _))
       .map(Option(_))
   }
 
-  def authenticate(secret: String): Directive1[String] = {
+  def authenticate(secret: String): Directive1[Long] = {
     headerValueByName("Authorization")
       .map(parseToken(secret, _))
       .map(Option(_))
       .flatMap {
-        case Some(username) =>
-          provide(username)
+        case Some(userId) =>
+          provide(userId)
         case None =>
           reject
       }
   }
 
-  private def parseToken(secret: String, token: String): String =
+  private def parseToken(secret: String, token: String): Long =
     Jwts.parser()
       .setSigningKey(secret)
       .parseClaimsJwt(token.split(" ").tail.head)
       .getBody
-      .getSubject
+      .getSubject.toInt
