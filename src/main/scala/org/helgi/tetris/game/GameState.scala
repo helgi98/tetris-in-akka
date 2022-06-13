@@ -71,14 +71,13 @@ case class GameState(grid: (Int, Int), placedBlocks: Set[Pos],
   private def clearLines(blocks: Set[Pos]): (Int, Set[Pos]) =
     val blocksByLine = blocks.groupBy(_._2)
     val linesToBeRemoved = blocksByLine.filter(_._2.size == grid._1).keySet
-
     val linesCleared = linesToBeRemoved.size
-    val clearedBlocks = blocksByLine.filter((y, _) => !linesToBeRemoved.contains(y))
+    val updatedBlocks = blocksByLine.filter((y, _) => !linesToBeRemoved.contains(y))
       .flatMap((y, poss) => {
         val delta = linesToBeRemoved.count(_ < y)
         poss.map(_ - (0, delta))
       }).toSet
-    (linesCleared, clearedBlocks)
+    (linesCleared, updatedBlocks)
 
   @tailrec
   private def tryToPlace(blocks: Set[Pos], p: Piece): Option[Piece] =

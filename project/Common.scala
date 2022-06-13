@@ -8,7 +8,7 @@ object Common {
   private val doobieVersion = "1.0.0-RC1"
   private val jwtVersion = "0.9.1"
   private val flywayVersion = "8.5.11"
-  private val pureConfigVersion = "0.17.1"
+  private val scalaLogging = "3.9.4"
 
   private val postgresVersion = "42.3.6"
   private val logbackVersion = "1.2.11"
@@ -24,12 +24,10 @@ object Common {
   private[this] def dependencySettings = Seq(
     libraryDependencies ++= Seq(
       // Akka
-      "com.typesafe.akka" %% "akka-actor" % akkaVersion,
-      "com.typesafe.akka" %% "akka-stream" % akkaVersion,
-      "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
       "org.tpolecat" %% "doobie-core" % doobieVersion,
       "org.tpolecat" %% "doobie-postgres" % doobieVersion,
       "org.tpolecat" %% "doobie-hikari" % doobieVersion,
+      "com.typesafe.scala-logging" %% "scala-logging" % scalaLogging,
       "org.flywaydb" % "flyway-core" % flywayVersion,
       "ch.qos.logback" % "logback-classic" % logbackVersion,
       "org.postgresql" % "postgresql" % postgresVersion,
@@ -39,6 +37,9 @@ object Common {
   )
 
   private[this] def scala3CrossDependencies = Seq(
+    "com.typesafe.akka" %% "akka-actor" % akkaVersion,
+    "com.typesafe.akka" %% "akka-stream" % akkaVersion,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
     "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
   ).map(_.cross(CrossVersion.for3Use2_13))

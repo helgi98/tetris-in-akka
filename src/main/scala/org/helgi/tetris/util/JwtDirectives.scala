@@ -11,9 +11,8 @@ object JwtDirectives:
   import RouteDirectives.*
 
   def authenticateOpt(secret: String): Directive1[Option[Long]] = {
-    headerValueByName("Authorization")
-      .map(parseToken(secret, _))
-      .map(Option(_))
+    optionalHeaderValueByName("Authorization")
+      .map(_.map(parseToken(secret, _)))
   }
 
   def authenticate(secret: String): Directive1[Long] = {

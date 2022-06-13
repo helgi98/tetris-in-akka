@@ -27,7 +27,7 @@ enum GameProtocol:
   case GameOver
   case GameFailure(t: Throwable)
 
-trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
+trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol :
   implicit val tetrominoFormat: RootJsonFormat[TetrominoType] = new RootJsonFormat[TetrominoType] :
     def write(obj: TetrominoType): JsValue = JsString(obj.toString)
 
@@ -47,10 +47,9 @@ trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
       }
     }
 
-  implicit val tetrisPieceFormat: RootJsonFormat[Piece] = jsonFormat3(Piece.apply)
+  implicit val tetrisPieceFormat: RootJsonFormat[Piece] = jsonFormat(Piece.apply, "pos", "kind", "theta")
   implicit val gameStateFormat: RootJsonFormat[GameState] = jsonFormat8(GameState.apply)
   implicit val gameDataFormat: RootJsonFormat[GameData] = jsonFormat3(GameData.apply)
-}
 
 
 trait GameApi extends UserJsonSupport :
@@ -66,31 +65,9 @@ trait GameApi extends UserJsonSupport :
   implicit private val mat: Materializer = Materializer(system)
 
   private val gameRepoActor = system.actorOf(GameRepoActor.props(gameRepo))
-
-  private case class GameSessionRef(createdAt: Instant, actor: ActorRef)
-
-  private val gameSessions = scala.collection.mutable.Map[String, GameSessionRef]()
+  private val gameSessions = scala.collection.concurrent.TrieMap[String, GameSessionRef]()
 
   system.scheduler.scheduleAtFixedRate(1.days, 1.days) { () => clearOldGameSessions() }
-
-  def gameMessageFlow(sessionRef: ActorRef): Flow[Message, TextMessage, NotUsed] =
-    val (broker, source) = Source.actorRefWithBackpressure[GameProtocol]("",
-      { case GameProtocol.GameOver => CompletionStrategy.draining },
-      { case GameProtocol.GameFailure(t) => t })
-      .map {
-        case GameProtocol.GameStateMsg(gd) => TextMessage(gd.toJson.prettyPrint)
-        case _ => TextMessage("Invalid Error")
-      }
-      .preMaterialize()
-
-    sessionRef ! GameSessionMessage.Start(broker)
-
-    val sink = Flow[Message].collect {
-      case TextMessage.Strict(text) =>
-        sessionRef.tell(GameCommand.valueOf(text), broker)
-    }.to(Sink.ignore)
-
-    Flow.fromSinkAndSource(sink, source)
 
   def gameRoutes: Route = pathPrefix("game") {
     path("create") {
@@ -112,7 +89,26 @@ trait GameApi extends UserJsonSupport :
       }
   }
 
-  def clearOldGameSessions(): Unit =
+  private def gameMessageFlow(sessionRef: ActorRef): Flow[Message, TextMessage, NotUsed] =
+    val (broker, source) = Source.actorRefWithBackpressure[GameProtocol]("",
+      { case GameProtocol.GameOver => CompletionStrategy.draining },
+      { case GameProtocol.GameFailure(t) => t })
+      .map {
+        case GameProtocol.GameStateMsg(gd) => TextMessage(gd.toJson.prettyPrint)
+        case _ => TextMessage("Invalid Error")
+      }
+      .preMaterialize()
+
+    sessionRef ! GameSessionMessage.Start(broker)
+
+    val sink = Flow[Message].collect {
+      case TextMessage.Strict(text) =>
+        sessionRef.tell(GameCommand.valueOf(text), broker)
+    }.to(Sink.ignore)
+
+    Flow.fromSinkAndSource(sink, source)
+
+  private def clearOldGameSessions(): Unit =
     val sessionIds = gameSessions
       .filter(_._2.createdAt.isBefore(Instant.now().minus(Duration.ofDays(1))))
       .map { (id, session) =>
@@ -120,3 +116,5 @@ trait GameApi extends UserJsonSupport :
         id
       }
     gameSessions --= sessionIds
+
+  private case class GameSessionRef(createdAt: Instant, actor: ActorRef)

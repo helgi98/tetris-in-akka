@@ -8,7 +8,7 @@ create table user_info (
 
 create table game_result (
     id serial primary key,
-    user_id integer not null references user_info
+    user_id integer not null references user_info,
     score integer not null,
     lines_cleared integer not null,
     lvl integer not null,
