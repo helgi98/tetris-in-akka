@@ -12,6 +12,7 @@ import akka.stream.scaladsl.*
 import org.helgi.tetris.api.*
 import org.helgi.tetris.config.JwtConfig
 import org.helgi.tetris.game.*
+import org.helgi.tetris.game.Pos.Pos
 import org.helgi.tetris.model.User
 import org.helgi.tetris.repository.{GameRepoActor, GameResultRepository, UserRepository}
 import org.helgi.tetris.util.JwtDirectives.*
@@ -47,7 +48,14 @@ trait UserJsonSupport extends SprayJsonSupport with DefaultJsonProtocol :
       }
     }
 
-  implicit val tetrisPieceFormat: RootJsonFormat[Piece] = jsonFormat(Piece.apply, "pos", "kind", "theta")
+  implicit val tetrisPieceFormat: RootJsonFormat[Piece] = new RootJsonFormat[Piece] :
+    private val readFormat = jsonFormat(Piece.apply, "pos", "kind", "theta")
+
+    override def read(json: JsValue): Piece = readFormat.read(json)
+
+
+    override def write(obj: Piece): JsValue = JsObject(("pos", obj.pos.toJson), ("kind", obj.kind.toJson),
+      ("theta", obj.theta.toJson), ("blocks", obj.blocks.toJson))
   implicit val gameStateFormat: RootJsonFormat[GameState] = jsonFormat8(GameState.apply)
   implicit val gameDataFormat: RootJsonFormat[GameData] = jsonFormat3(GameData.apply)
 
@@ -73,11 +81,13 @@ trait GameApi extends UserJsonSupport :
     path("create") {
       pathEndOrSingleSlash {
         authenticateOpt(jwtConfig.secret) { optUserId =>
-          val gameSessionActor = system.actorOf(GameSessionActor.props(optUserId,
-            GameOptions(), gameRepoActor))
-          val sessionId = UUID.randomUUID().toString
-          gameSessions += (sessionId -> GameSessionRef(Instant.now(), gameSessionActor))
-          complete(Created, sessionId)
+          post {
+            val gameSessionActor = system.actorOf(GameSessionActor.props(optUserId,
+              GameOptions(), gameRepoActor))
+            val sessionId = UUID.randomUUID().toString
+            gameSessions += (sessionId -> GameSessionRef(Instant.now(), gameSessionActor))
+            complete(Created, sessionId)
+          }
         }
       }
     } ~
@@ -91,7 +101,7 @@ trait GameApi extends UserJsonSupport :
 
   private def gameMessageFlow(sessionRef: ActorRef): Flow[Message, TextMessage, NotUsed] =
     val (broker, source) = Source.actorRefWithBackpressure[GameProtocol]("",
-      { case GameProtocol.GameOver => CompletionStrategy.draining },
+      { case GameProtocol.GameOver => CompletionStrategy.immediately },
       { case GameProtocol.GameFailure(t) => t })
       .map {
         case GameProtocol.GameStateMsg(gd) => TextMessage(gd.toJson.prettyPrint)

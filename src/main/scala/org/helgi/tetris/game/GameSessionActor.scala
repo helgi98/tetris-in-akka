@@ -17,7 +17,7 @@ enum GameSessionMessage:
   case Update(gd: GameData)
   case GameOver(gd: GameData)
 
-case class GameOptions(initLvl: Int = 0, grid: (Int, Int) = (10, 20))
+case class GameOptions(initLvl: Int = 0, grid: (Int, Int) = (10, 17))
 
 case class GameSession(ticker: Cancellable, gameData: GameData, startedAt: Instant)
 

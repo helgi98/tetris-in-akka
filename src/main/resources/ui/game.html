@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang='en'>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+
+<head>
+    <meta charset='UTF-8'>
+    <style>
+        canvas {
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            width: 640px;
+            height: 640px;
+            margin: -320px 0 0 -320px;
+        }
+    </style>
+</head>
+
+<body>
+<canvas></canvas>
+<script>
+    let sessionId = null
+
+    function createGameApi() {
+        $.post("http://localhost:8080/api/game/create", function (resp) {
+            sessionId = resp
+        })
+    }
+
+    function startGameApi(onUpdate) {
+        let socket = new WebSocket("ws://localhost:8080/api/game/connect/" + sessionId)
+        socket.onopen = function (e) {
+            console.log("[open] Connection established");
+            console.log("Sending to server");
+        };
+
+        socket.onmessage = function (event) {
+            onUpdate(event.data)
+        };
+
+        socket.onclose = function (event) {
+            if (event.wasClean) {
+                console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+            } else {
+                // e.g. server process killed or network down
+                // event.code is usually 1006 in this case
+                console.log('[close] Connection died');
+            }
+        };
+
+        socket.onerror = function (error) {
+            console.log(`[error] ${error.message}`);
+        };
+
+        return socket
+    }
+
+    'use strict';
+    const canvas = document.querySelector('canvas');
+    canvas.width = 640;
+    canvas.height = 640;
+
+    const g = canvas.getContext('2d');
+
+    const EMPTY = -1;
+    const BORDER = -2;
+
+    let nextShape;
+    const dim = 640;
+    const nRows = 18;
+    const nCols = 12;
+    const blockSize = 30;
+    const topMargin = 50;
+    const leftMargin = 20;
+    const scoreX = 400;
+    const scoreY = 330;
+    const titleX = 130;
+    const titleY = 160;
+    const clickX = 120;
+    const clickY = 400;
+    const previewCenterX = 467;
+    const previewCenterY = 97;
+    const mainFont = 'bold 48px monospace';
+    const smallFont = 'bold 18px monospace';
+    const colors = ['green', 'red', 'blue', 'purple', 'orange', 'blueviolet', 'magenta'];
+    const gridRect = {x: 46, y: 47, w: 308, h: 517};
+    const previewRect = {x: 387, y: 47, w: 200, h: 200};
+    const titleRect = {x: 100, y: 95, w: 252, h: 100};
+    const clickRect = {x: 50, y: 375, w: 252, h: 40};
+    const outerRect = {x: 5, y: 5, w: 630, h: 630};
+    const squareBorder = 'white';
+    const titlebgColor = 'white';
+    const textColor = 'black';
+    const bgColor = '#DDEEFF';
+    const gridColor = '#BECFEA';
+    const gridBorderColor = '#7788AA';
+    const largeStroke = 5;
+    const smallStroke = 2;
+
+    let fastDown = false;
+
+    const grid = [];
+    const scoreboard = new Scoreboard();
+
+    function listenToPlayerInput(socket) {
+        function inputHandler(event) {
+
+            if (scoreboard.isGameOver())
+                return;
+
+            switch (event.code) {
+                case 'w':
+                case 'ArrowUp':
+                    socket.send("Rotate")
+                    break;
+                case 'a':
+                case 'ArrowLeft':
+                    socket.send("Left")
+                    break;
+                case 'd':
+                case 'ArrowRight':
+                    socket.send("Right")
+                    break;
+                case 's':
+                case 'ArrowDown':
+                    socket.send("Tick")
+                    break;
+                case 'Space':
+                    socket.send("Drop")
+                    break;
+                case 'ShiftLeft':
+                    socket.send("Hold")
+                    break;
+            }
+        }
+
+        addEventListener('keydown', inputHandler);
+    }
+
+    addEventListener('click', function () {
+        startNewGame();
+    });
+
+    addEventListener('keyup', function () {
+        fastDown = false;
+    });
+
+    function Scoreboard() {
+        let level = 0;
+        let lines = 0;
+        let score = 0;
+        let gameOver = true;
+
+        this.reset = function () {
+            level = lines = score = 0;
+            gameOver = false;
+        }
+
+        this.setGameOver = function () {
+            gameOver = true;
+        }
+
+        this.isGameOver = function () {
+            return gameOver;
+        }
+
+        this.setScore = function (s) {
+            score = s;
+        }
+
+        this.setLevel = function (l) {
+            level = l;
+        }
+
+        this.setLines = function (l) {
+            lines = l;
+        }
+
+        this.getLevel = function () {
+            return level;
+        }
+
+        this.getLines = function () {
+            return lines;
+        }
+
+        this.getScore = function () {
+            return score;
+        }
+    }
+
+    function drawGame() {
+        g.clearRect(0, 0, canvas.width, canvas.height);
+        drawUI();
+        if (scoreboard.isGameOver()) {
+            drawStartScreen();
+        } else {
+            drawFallingShape();
+        }
+    }
+
+    function drawStartScreen() {
+        g.font = mainFont;
+
+        fillRect(titleRect, titlebgColor);
+        fillRect(clickRect, titlebgColor);
+
+        g.fillStyle = textColor;
+        g.fillText('Tetris', titleX, titleY);
+
+        g.font = smallFont;
+        g.fillText('click to start', clickX, clickY);
+    }
+
+    function fillRect(r, color) {
+        g.fillStyle = color;
+        g.fillRect(r.x, r.y, r.w, r.h);
+    }
+
+    function drawRect(r, color) {
+        g.strokeStyle = color;
+        g.strokeRect(r.x, r.y, r.w, r.h);
+    }
+
+    function drawSquare(colorIndex, r, c) {
+        const bs = blockSize;
+        g.fillStyle = colors[colorIndex];
+        g.fillRect(leftMargin + c * bs, topMargin + r * bs, bs, bs);
+
+        g.lineWidth = smallStroke;
+        g.strokeStyle = squareBorder;
+        g.strokeRect(leftMargin + c * bs, topMargin + r * bs, bs, bs);
+    }
+
+    function drawUI() {
+
+        // background
+        fillRect(outerRect, bgColor);
+        fillRect(gridRect, gridColor);
+
+        // the blocks dropped in the grid
+        for (let r = 0; r < nRows; r++) {
+            for (let c = 0; c < nCols; c++) {
+                const idx = grid[r][c];
+                if (idx > EMPTY)
+                    drawSquare(idx, r, c);
+            }
+        }
+
+        // the borders of grid and preview panel
+        g.lineWidth = largeStroke;
+        drawRect(gridRect, gridBorderColor);
+        drawRect(previewRect, gridBorderColor);
+        drawRect(outerRect, gridBorderColor);
+
+        // scoreboard
+        g.fillStyle = textColor;
+        g.font = smallFont;
+        g.fillText('level      ' + scoreboard.getLevel(), scoreX, scoreY + 30);
+        g.fillText('lines      ' + scoreboard.getLines(), scoreX, scoreY + 60);
+        g.fillText('score      ' + scoreboard.getScore(), scoreX, scoreY + 90);
+
+        // preview
+        // var minX = 5, minY = 5, maxX = 0, maxY = 0;
+        // nextShape.pos.forEach(function (p) {
+        //     minX = Math.min(minX, p[0]);
+        //     minY = Math.min(minY, p[1]);
+        //     maxX = Math.max(maxX, p[0]);
+        //     maxY = Math.max(maxY, p[1]);
+        // });
+        // var cx = previewCenterX - ((minX + maxX + 1) / 2.0 * blockSize);
+        // var cy = previewCenterY - ((minY + maxY + 1) / 2.0 * blockSize);
+        //
+        // g.translate(cx, cy);
+        // nextShape.shape.forEach(function (p) {
+        //     drawSquare(nextShape.ordinal, p[1], p[0]);
+        // });
+        // g.translate(-cx, -cy);
+    }
+
+    let fallingFigure = []
+
+    function drawFallingShape() {
+        drawShape(fallingFigure)
+    }
+
+    function waitOnFor(cond, action, times) {
+        if (cond() || times === 0) {
+            console.log(sessionId + " " + times);
+            action();
+            return;
+        }
+
+        setTimeout(() => waitOnFor(cond, action, times - 1), 250);
+    }
+
+    function startNewGame() {
+        createGameApi();
+        waitOnFor(() => (sessionId), () => {
+            clearGrid();
+            scoreboard.reset();
+            let socket = startGameApi(msg => {
+                if (msg !== "GameOver") {
+                    let gd = JSON.parse(msg);
+                    console.log(gd);
+                    clearGrid()
+                    fillGrid(gd.gs.placedBlocks);
+                    fillFallingFigure(gd.gs.currentPiece.blocks);
+                    fillScoreboard(gd);
+                } else {
+                    scoreboard.setGameOver(true);
+                    scoreboard.reset();
+                }
+                drawGame();
+            });
+            listenToPlayerInput(socket)
+        }, 10);
+    }
+
+    const DEFAULT_COLOR = 0
+
+    function drawShape(idxs) {
+        idxs.forEach(idx => {
+            drawSquare(DEFAULT_COLOR, nRows - idx[1] - 1, idx[0]);
+        });
+    }
+
+    function fillScoreboard(gd) {
+        scoreboard.setScore(gd.score);
+        scoreboard.setLevel(gd.lvl);
+        scoreboard.setLines(gd.gs.totalLinesCleared);
+    }
+
+    function fillGrid(poss) {
+        poss.forEach(pos => {
+            grid[nRows - pos[1] - 1][pos[0]] = DEFAULT_COLOR;
+        });
+    }
+
+    function fillFallingFigure(poss) {
+        fallingFigure = poss
+    }
+
+    function clearGrid() {
+        function fill(arr, value) {
+            for (let i = 0; i < arr.length; i++) {
+                arr[i] = value;
+            }
+        }
+
+        for (let r = 0; r < nRows; r++) {
+            grid[r] = new Array(nCols);
+            fill(grid[r], EMPTY);
+            for (let c = 0; c < nCols; c++) {
+                if (c === 0 || c === nCols - 1 || r === nRows - 1)
+                    grid[r][c] = BORDER;
+            }
+        }
+    }
+
+    function init() {
+        clearGrid();
+        drawGame();
+    }
+
+    init();
+</script>
+
+</body>
+
+</html>
