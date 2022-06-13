@@ -41,6 +41,25 @@ case class GameState(grid: (Int, Int), placedBlocks: Set[Pos],
 
   def right: GameState = makeMove(_.right)
 
+  def tick: GameState = makeMove(_.down, { _ => afterDropState })
+
+  def drop: GameState =
+    move(_.down)
+      .map(_.drop)
+      .getOrElse(afterDropState)
+
+  def hold: GameState =
+    if canHold then
+      held.orElse(Some(next))
+        .map(Piece(startPlace(grid), _))
+        .flatMap(tryToPlace(placedBlocks, _))
+        .map { cp =>
+          val hp = Some(currentPiece.kind)
+          val np = if held.isEmpty then randomPiece else next
+          copy(currentPiece = cp, next = np, held = hp, canHold = false)
+        }.getOrElse(this)
+    else this
+
   private def makeMove(f: Piece => Piece, onFail: (=> Piece) => GameState = _ => this): GameState =
     move(f).getOrElse(onFail(f(currentPiece)))
 
@@ -68,30 +87,11 @@ case class GameState(grid: (Int, Int), placedBlocks: Set[Pos],
   private def isColliding(blocks: Set[Pos], block: Pos): Boolean =
     blocks contains block
 
-  def tick: GameState = makeMove(_.down, { _ => afterDropState })
-
-  def drop: GameState =
-    move(_.down)
-      .map(_.drop)
-      .getOrElse(afterDropState)
-
-  def hold: GameState =
-    if canHold then
-      held.orElse(Some(next))
-        .map(Piece(startPlace(grid), _))
-        .flatMap(tryToPlace(placedBlocks, _))
-        .map { cp =>
-          val hp = Some(currentPiece.kind)
-          val np = if held.isEmpty then randomPiece else next
-          copy(currentPiece = cp, next = np, held = hp, canHold = false)
-        }.getOrElse(this)
-    else this
-
   private def afterDropState: GameState =
     tryToGenerateNewPiece.map { it =>
       val (linesCleared, blocks) = clearLines(placedBlocks ++ currentPiece.blocks)
       copy(placedBlocks = blocks, currentPiece = it, next = randomPiece,
-        totalLinesCleared = totalLinesCleared + linesCleared)
+        totalLinesCleared = totalLinesCleared + linesCleared, canHold = true)
     }.getOrElse(copy(status = Over))
 
   private def clearLines(blocks: Set[Pos]): (Int, Set[Pos]) =

@@ -41,6 +41,9 @@
         socket.onclose = function (event) {
             if (event.wasClean) {
                 console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+                scoreboard.setGameOver(true);
+                scoreboard.reset();
+                drawGame();
             } else {
                 // e.g. server process killed or network down
                 // event.code is usually 1006 in this case
@@ -156,8 +159,8 @@
             gameOver = false;
         }
 
-        this.setGameOver = function () {
-            gameOver = true;
+        this.setGameOver = function (v) {
+            gameOver = v;
         }
 
         this.isGameOver = function () {
